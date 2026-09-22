@@ -1,8 +1,16 @@
-import csv
-from pathlib import Path
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+from controller import (
+    create_booking,
+    delete_booking,
+    get_bookings,
+    get_users,
+    initialize_database,
+    search_hotels,
+    update_booking_status,
+)
+from models import BookingCreate, BookingStatusUpdate
 
 app = FastAPI()
 
@@ -14,14 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-
-
-def read_csv(filename):
-    file_path = BASE_DIR / filename
-
-    with open(file_path, newline="", encoding="utf-8-sig") as file:
-        return list(csv.DictReader(file))
+initialize_database()
 
 
 @app.get("/")
@@ -30,26 +31,62 @@ def home():
 
 
 @app.get("/search")
-def search_hotels(name: str):
-    hotels = read_csv("hotels.csv")
-    trips = read_csv("trips.csv")
+def search(name: str):
+    return search_hotels(name)
 
-    matches = []
 
-    for hotel in hotels:
-        if name.lower() in hotel["hotel_name"].lower():
+@app.get("/users")
+def users():
+    return get_users()
 
-            hotel_trips = [
-                trip
-                for trip in trips
-                if trip["hotel_id"] == hotel["hotel_id"]
-            ]
 
-            matches.append(
-                {
-                    "hotel": hotel,
-                    "trips": hotel_trips,
-                }
-            )
+@app.get("/bookings")
+def bookings():
+    return get_bookings()
 
-    return matches
+
+@app.post("/bookings")
+def add_booking(booking: BookingCreate):
+    try:
+        booking_id = create_booking(
+            booking.user_id,
+            booking.trip_id,
+        )
+
+        return {
+            "message": "Booking created",
+            "booking_id": booking_id,
+        }
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+
+@app.put("/bookings/{booking_id}/status")
+def change_booking_status(
+    booking_id: str,
+    update: BookingStatusUpdate,
+):
+    update_booking_status(
+        booking_id,
+        update.status,
+    )
+
+    return {
+        "message": "Booking updated",
+        "booking_id": booking_id,
+        "status": update.status,
+    }
+
+
+@app.delete("/bookings/{booking_id}")
+def remove_booking(booking_id: str):
+    delete_booking(booking_id)
+
+    return {
+        "message": "Booking deleted",
+        "booking_id": booking_id,
+    }

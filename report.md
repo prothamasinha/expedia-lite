@@ -1,141 +1,254 @@
-# Expedia Lite — Part 2
+# IST 402 — Assignment 2 Part 1
+## Live Hotel Search and Map
 
-## Repository and commit
+### 1. Project Access
+**Repository:**  
+https://github.com/prothamasinha/expedia-lite
 
-GitHub repository: https://github.com/prothamasinha/expedia-lite
+**Assessed Commit:**  
+8f9a4e0cc77ee25f6f7a05d61d082b0a7759576d
 
-Part 1 commit:
-d70d223f93025a3211fea2b4549ef8173e6205af
+### Startup and Configuration Instructions
 
-Part 2 commit:
-71f5ed2360707524997f6c622e2af75b2d6873ef
+#### Backend
 
-## Implementation
+1. Open a terminal in the project folder.
+2. Navigate to the backend folder:
 
-Part 2 expands Expedia Lite from a CSV-based hotel search application into a persistent booking application using SQLite.
+```bash
+cd backend
 
-The Vue frontend allows users to search for hotels, select a demo traveler, create bookings, view booking history, cancel bookings, and delete test bookings.
+## 2. Research Notes
 
-FastAPI handles communication between the Vue frontend and the Python backend.
+Before implementation, I reviewed the Geoapify Geocoding API, Geoapify Places API, and Leaflet documentation.
 
-The backend uses SQLite for persistence. The starter hotel, trip, user, and booking data is seeded into the database, and application reads and writes use SQLite after initialization.
+### Sources Consulted
 
-The application follows an MVC-style structure:
+- Geoapify Geocoding API: https://apidocs.geoapify.com/docs/geocoding/forward-geocoding/
+- Geoapify Places API: https://apidocs.geoapify.com/docs/places/
+- Leaflet documentation: https://leafletjs.com/reference.html
 
-- Models define the application data structures.
-- Vue acts as the View and presents the interface.
-- The database controller performs SQLite CRUD operations.
-- FastAPI connects the frontend to the backend.
+### What I Learned
 
-## CRUD functionality
+Geoapify's geocoding API can resolve a U.S. ZIP code into latitude and longitude coordinates. I used the returned ZIP location as the center of the hotel search rather than using the user's current location.
 
-### Create
+The Geoapify Places API can search for hotel locations within a geographic radius. I used a 5 km radius around the ZIP-code center as required by the assignment.
 
-A user can select a traveler, search for a hotel, and click Book on an available trip.
+Leaflet provides an interactive map that can display hotel locations with markers and popups.
 
-A new booking is assigned a unique booking ID and saved to SQLite.
+### Design Decisions
 
-### Read
+Based on the research, I designed the application so that:
 
-Booking History displays bookings stored in SQLite, including the traveler, hotel, trip, and current status.
+- the user enters a five-digit U.S. ZIP code;
+- hotel data is requested through the FastAPI backend;
+- the Geoapify API key stays in the backend `.env` file;
+- hotel results appear in both a list and a Leaflet map;
+- clicking a hotel in the list identifies the same hotel on the map;
+- clicking a marker on the map identifies the same hotel in the list;
+- the application displays only information actually returned by Geoapify;
+- prices, ratings, room availability, and booking claims are not invented;
+- invalid ZIP codes, unresolved ZIP codes, empty results, loading states, and request failures are handled separately.
 
-### Update
+## 3. Early Mockup
 
-A confirmed booking can be cancelled through the frontend.
+Before implementation, I created an early design showing the planned ZIP-code search, hotel results list, and map layout.
 
-Cancelling changes the booking status to `cancelled` while keeping the booking record in history.
+**Mockup:**  
+[ADD MOCKUP IMAGE OR LINK HERE]
 
-### Delete
+The original design focused on a simple search-first layout. During implementation, I kept the same basic idea but adjusted the spacing and result layout so the hotel list and Leaflet map could be viewed side by side. I also added clear messages for invalid ZIP codes, unresolved ZIP codes, loading, empty results, and failed requests.
 
-A test booking can be deleted through the frontend.
+## 4. Screen-Recorded Demo
 
-The deleted booking is removed from SQLite and disappears from Booking History.
+**Demo Video:**  
+[ADD VIDEO LINK HERE]
 
-## Verification
+The demo shows:
 
-I manually reviewed the Part 2 changes in VS Code and tested the application in the browser.
+- entering ZIP code `16802`;
+- Geoapify returning nearby hotels;
+- the hotels appearing in a list and on the Leaflet map;
+- selecting Scholar Hotel State College from the list and seeing the corresponding map popup;
+- selecting Nittany Lion Inn from the map and seeing the matching list item selected;
+- invalid ZIP handling;
+- unresolved ZIP handling;
+- failed-request handling.
 
-### Create booking
+---
 
-Action:
-Selected a demo traveler, searched for Harbor Lantern Hotel, and clicked Book on an available trip.
+## 5. Verification Record
 
-Expected result:
-A new confirmed booking should be created and appear in Booking History.
+**Live Search ZIP Tested:** `16802`  
+**Observation Date:** September 29, 2026
 
-Observed result:
-The new booking appeared successfully in Booking History.
+### Test 1 — Valid ZIP Search
 
-### Read booking history
+**Input:**  
+`16802`
 
-Action:
-Opened the application and viewed Booking History.
+**Expected Result:**  
+The backend should resolve the ZIP code to the intended U.S. postcode location and search for hotels within 5 km of that point.
 
-Expected result:
-Bookings stored in SQLite should appear with traveler, hotel, trip, and status information.
+**Observed Result:**  
+The ZIP resolved to State College, Pennsylvania. Geoapify returned 20 nearby hotel results, including Scholar Hotel State College, Hotel State College, Nittany Lion Inn, Hyatt Place State College, and others. The hotels appeared in both the list and the Leaflet map.
 
-Observed result:
-The seeded and newly created bookings displayed successfully.
+**Result:** Pass
 
-### Update booking
+### Test 2 — List to Map Synchronization
 
-Action:
-Clicked Cancel on a confirmed booking.
+**Action:**  
+Clicked Scholar Hotel State College in the hotel list.
 
-Expected result:
-The booking should remain in Booking History but its status should change to cancelled.
+**Expected Result:**  
+The same hotel should be identified on the map.
 
-Observed result:
-The booking remained visible and its status changed to `cancelled`.
+**Observed Result:**  
+The map moved to Scholar Hotel State College and opened its popup.
 
-### Delete booking
+**Result:** Pass
 
-Action:
-Clicked Delete on a test booking.
+### Test 3 — Map to List Synchronization
 
-Expected result:
-The booking should be removed from Booking History and the SQLite database.
+**Action:**  
+Clicked the Nittany Lion Inn marker on the map.
 
-Observed result:
-The booking disappeared successfully.
+**Expected Result:**  
+The corresponding hotel should be identified in the list.
 
-### Persistence
+**Observed Result:**  
+The Nittany Lion Inn popup opened and the matching hotel card in the list became selected.
 
-Action:
-Refreshed the browser and restarted the application.
+**Result:** Pass
 
-Expected result:
-Saved database changes should remain and starter records should not be duplicated.
+### Test 4 — Invalid ZIP
 
-Observed result:
-Booking History loaded successfully from SQLite and persisted records remained available.
+**Input:**  
+`123`
 
-## Demo video
+**Expected Result:**  
+The application should reject the input before performing a search.
 
-Part 2 demo video:
-https://drive.google.com/file/d/1aLyAHXxhLgLYScS7uxbiFdUhGFnCBIGx/view?usp=sharing
+**Observed Result:**  
+The application displayed: `Please enter a valid five-digit U.S. ZIP code.`
 
-The demo is under three minutes and shows the application performing Create, Read, Update, and Delete operations through the frontend.
+**Result:** Pass
 
-## Project context and next steps
+### Test 5 — Unresolved ZIP
 
-README:
-https://github.com/prothamasinha/expedia-lite/blob/main/README.md
+**Input:**  
+`00000`
 
-AGENTS.md:
-https://github.com/prothamasinha/expedia-lite/blob/main/AGENTS.md
+**Expected Result:**  
+The application should not silently search a different location.
 
-Design note:
-https://github.com/prothamasinha/expedia-lite/blob/main/docs/design.md
+**Observed Result:**  
+The application displayed: `That U.S. ZIP code could not be resolved.`
 
-Selected prompts:
-https://github.com/prothamasinha/expedia-lite/blob/main/prompts/part1-prompts.md
+**Result:** Pass
 
-Current handoff:
-https://github.com/prothamasinha/expedia-lite/blob/main/handoffs/current.md
+### Test 6 — Failed Request
 
-Remaining limitations:
-The application uses simulated travelers and local SQLite persistence. The optional authentication and surge-pricing bonus features were not implemented.
+**Action:**  
+Stopped the FastAPI backend and attempted a search for `16802`.
 
-Next task:
-Continue improving interface usability and application validation.
+**Expected Result:**  
+The application should display a request failure instead of saying that no hotels were found.
+
+**Observed Result:**  
+The application displayed: `The request could not be completed. Please try again.`
+
+**Result:** Pass
+
+### Test 7 — Credential Protection
+
+**Action:**  
+Used `git check-ignore -v .env`.
+
+**Expected Result:**  
+The `.env` file should be ignored by Git.
+
+**Observed Result:**  
+Git reported that `.env` is ignored through `.gitignore`.
+
+**Result:** Pass
+
+### Test 8 — Dependency Verification
+
+Before installing new dependencies, the existing environment was checked.
+
+For the backend, `requests` and `python-dotenv` were initially not installed in the project virtual environment. After approval, they were installed and verified.
+
+For the frontend, Leaflet was checked with:
+
+`npm list leaflet`
+
+It was not installed. After approval, Leaflet was installed and verified as version `1.9.4`.
+
+**Result:** Pass
+
+### Remaining Limitations
+
+The live hotel results depend on Geoapify's current provider data, so the number and details of returned hotels may change over time.
+
+The application does not claim that the results are a complete inventory of every hotel in the area.
+
+Geoapify provides location information, so the application does not invent hotel prices, ratings, room availability, or booking confirmation.
+
+---
+
+## 6. AI Disclosure and Evidence Log
+
+**AI Tool:** ChatGPT  
+**Model:** GPT-5.6 Sol
+
+I used ChatGPT as a development assistant while completing Assignment 2 Part 1.
+
+### Use 1 — Backend API Integration
+
+**Prompt excerpt:**  
+"just rewrite the whole thing"
+
+**Use:**  
+ChatGPT helped me revise `main.py` so FastAPI could accept a five-digit ZIP code, use Geoapify to resolve the ZIP location, and request nearby hotels within 5 km.
+
+**Related change:**  
+`backend/main.py`
+
+### Use 2 — Frontend and Leaflet Integration
+
+**Prompt excerpt:**  
+"then"
+
+**Use:**  
+ChatGPT helped me update `App.vue` to display hotel results in a list and on a Leaflet map and synchronize selection between the two.
+
+**Related change:**  
+`frontend/src/App.vue`
+
+### Use 3 — Dependency Check and Installation
+
+**Prompt excerpt:**  
+"im confused what should i do next"
+
+**Use:**  
+ChatGPT helped me follow the CHECK, TAKE ACTION, and VERIFY process before installing `requests`, `python-dotenv`, and Leaflet.
+
+**Related changes:**  
+Backend virtual environment and frontend npm dependencies.
+
+### Failed or Revised Approach
+
+**Initial approach:**  
+The existing Expedia Lite application searched local hotel records by hotel name and included booking-related features.
+
+**Problem:**  
+Searching `16802` produced `No matching hotels found` because the application was still using the older local search functionality instead of live Geoapify data.
+
+**Revision:**  
+I added a new FastAPI route that resolves ZIP codes through Geoapify and searches nearby hotels. I then replaced the frontend search interface with ZIP-code search and a synchronized Leaflet map.
+
+**Result:**  
+The final version successfully searches live hotel data using ZIP code `16802` and displays synchronized hotel results on the list and map.
+
+AI suggestions were reviewed and tested before being included in the final project.

@@ -1,287 +1,478 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, nextTick, onBeforeUnmount } from 'vue'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
-const hotelName = ref('')
-const results = ref([])
-const users = ref([])
-const bookings = ref([])
-const selectedUser = ref('')
+const zipCode = ref('')
+const hotels = ref([])
+const center = ref(null)
+const selectedHotelId = ref(null)
+const status = ref('idle')
 const message = ref('')
 
+const mapElement = ref(null)
+
+let map = null
+let markers = new Map()
+
 async function searchHotels() {
-  const response = await fetch(
-    `http://127.0.0.1:8000/search?name=${encodeURIComponent(hotelName.value)}`
-  )
-  results.value = await response.json()
-}
+  const zip = zipCode.value.trim()
 
-async function loadUsers() {
-  const response = await fetch('http://127.0.0.1:8000/users')
-  users.value = await response.json()
+  hotels.value = []
+  center.value = null
+  selectedHotelId.value = null
+  message.value = ''
 
-  if (users.value.length > 0 && !selectedUser.value) {
-    selectedUser.value = users.value[0].user_id
+  if (!/^\d{5}$/.test(zip)) {
+    status.value = 'invalid'
+    message.value = 'Please enter a valid five-digit U.S. ZIP code.'
+    clearMap()
+    return
+  }
+
+  status.value = 'loading'
+
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:8000/hotels/nearby?zip_code=${encodeURIComponent(zip)}`
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        status.value = 'unresolved'
+        message.value =
+          data.detail || 'That U.S. ZIP code could not be resolved.'
+      } else {
+        status.value = 'error'
+        message.value =
+          data.detail || 'The hotel search request failed.'
+      }
+
+      clearMap()
+      return
+    }
+
+    center.value = data.center
+    hotels.value = data.hotels || []
+
+    if (hotels.value.length === 0) {
+      status.value = 'empty'
+      message.value = 'No nearby hotels were returned for this ZIP code.'
+      clearMap()
+      return
+    }
+
+    status.value = 'results'
+
+    await nextTick()
+    buildMap()
+  } catch (error) {
+    status.value = 'error'
+    message.value =
+      'The request could not be completed. Please try again.'
+    clearMap()
   }
 }
 
-async function loadBookings() {
-  const response = await fetch('http://127.0.0.1:8000/bookings')
-  bookings.value = await response.json()
-}
+function buildMap() {
+  clearMap()
 
-async function createBooking(tripId) {
-  if (!selectedUser.value) return
+  if (!center.value || !mapElement.value) {
+    return
+  }
 
-  await fetch('http://127.0.0.1:8000/bookings', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      user_id: selectedUser.value,
-      trip_id: tripId
+  map = L.map(mapElement.value).setView(
+    [
+      center.value.latitude,
+      center.value.longitude
+    ],
+    13
+  )
+
+  L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+      attribution:
+        '&copy; OpenStreetMap contributors'
+    }
+  ).addTo(map)
+
+  L.circleMarker(
+    [
+      center.value.latitude,
+      center.value.longitude
+    ],
+    {
+      radius: 7
+    }
+  )
+    .addTo(map)
+    .bindPopup(`Search center: ${zipCode.value}`)
+
+  hotels.value.forEach((hotel, index) => {
+    if (
+      hotel.latitude == null ||
+      hotel.longitude == null
+    ) {
+      return
+    }
+
+    const hotelId =
+      hotel.place_id || `hotel-${index}`
+
+    const marker = L.circleMarker(
+      [
+        hotel.latitude,
+        hotel.longitude
+      ],
+      {
+        radius: 9
+      }
+    )
+      .addTo(map)
+      .bindPopup(
+        `<strong>${escapeHtml(hotel.name)}</strong><br>${escapeHtml(
+          hotel.address || 'Address unavailable'
+        )}`
+      )
+
+    marker.on('click', () => {
+      selectHotel(hotelId, false)
     })
-  })
 
-  message.value = 'Booking created successfully.'
-  await loadBookings()
+    markers.set(hotelId, marker)
+  })
 }
 
-async function cancelBooking(bookingId) {
-  await fetch(`http://127.0.0.1:8000/bookings/${bookingId}/status`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      status: 'cancelled'
-    })
-  })
+function selectHotel(hotelId, openMarker = true) {
+  selectedHotelId.value = hotelId
 
-  message.value = 'Booking cancelled.'
-  await loadBookings()
+  if (openMarker) {
+    const marker = markers.get(hotelId)
+
+    if (marker && map) {
+      map.setView(marker.getLatLng(), 15)
+      marker.openPopup()
+    }
+  }
+
+  nextTick(() => {
+    const element = document.getElementById(
+      `hotel-${hotelId}`
+    )
+
+    if (element) {
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      })
+    }
+  })
 }
 
-async function deleteBooking(bookingId) {
-  await fetch(`http://127.0.0.1:8000/bookings/${bookingId}`, {
-    method: 'DELETE'
-  })
+function clearMap() {
+  markers.clear()
 
-  message.value = 'Booking deleted.'
-  await loadBookings()
+  if (map) {
+    map.remove()
+    map = null
+  }
 }
 
-onMounted(async () => {
-  await loadUsers()
-  await loadBookings()
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+onBeforeUnmount(() => {
+  clearMap()
 })
 </script>
 
 <template>
   <main>
     <header>
-      <h1>Expedia Lite</h1>
-      <p>Search hotels, create bookings, and manage your booking history.</p>
+      <h1>Hotel Discovery</h1>
+      <p>
+        Search for hotels near the center of a U.S. ZIP code.
+      </p>
     </header>
 
-    <section class="card">
-      <h2>Find a hotel</h2>
+    <section class="search-card">
+      <label for="zip">
+        U.S. ZIP Code
+      </label>
 
-      <div class="row">
+      <div class="search-row">
         <input
-          v-model="hotelName"
-          placeholder="Enter hotel name"
+          id="zip"
+          v-model="zipCode"
+          maxlength="5"
+          inputmode="numeric"
+          placeholder="Example: 16802"
+          @keyup.enter="searchHotels"
         />
 
-        <button @click="searchHotels">
-          Search
+        <button
+          type="button"
+          @click="searchHotels"
+          :disabled="status === 'loading'"
+        >
+          {{
+            status === 'loading'
+              ? 'Searching...'
+              : 'Search Hotels'
+          }}
         </button>
       </div>
 
-      <div class="row">
-        <label>Traveler:</label>
-
-        <select v-model="selectedUser">
-          <option
-            v-for="user in users"
-            :key="user.user_id"
-            :value="user.user_id"
-          >
-            {{ user.display_name }}
-          </option>
-        </select>
-      </div>
-
-      <p v-if="results.length === 0 && hotelName">
-        No matching hotels found.
+      <p
+        v-if="status === 'loading'"
+        class="status"
+      >
+        Searching Geoapify for nearby hotels...
       </p>
 
-      <div
-        v-for="result in results"
-        :key="result.hotel.hotel_id"
-        class="hotel"
+      <p
+        v-if="
+          status === 'invalid' ||
+          status === 'unresolved' ||
+          status === 'empty' ||
+          status === 'error'
+        "
+        class="status"
       >
-        <h3>{{ result.hotel.hotel_name }}</h3>
+        {{ message }}
+      </p>
+    </section>
 
-        <p>
-          {{ result.hotel.city }}, {{ result.hotel.state }}
-          · ${{ result.hotel.nightly_rate_usd }}/night
+    <section
+      v-if="status === 'results'"
+      class="results-layout"
+    >
+      <div class="results-panel">
+        <h2>
+          Hotels near {{ zipCode }}
+        </h2>
+
+        <p class="summary">
+          {{ hotels.length }} hotel result<span
+            v-if="hotels.length !== 1"
+          >s</span>
+          returned by Geoapify.
         </p>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Trip</th>
-              <th>Check In</th>
-              <th>Check Out</th>
-              <th>Action</th>
-            </tr>
-          </thead>
+        <button
+          v-for="(hotel, index) in hotels"
+          :id="`hotel-${hotel.place_id || `hotel-${index}`}`"
+          :key="hotel.place_id || index"
+          type="button"
+          class="hotel-card"
+          :class="{
+            selected:
+              selectedHotelId ===
+              (hotel.place_id || `hotel-${index}`)
+          }"
+          @click="
+            selectHotel(
+              hotel.place_id || `hotel-${index}`
+            )
+          "
+        >
+          <strong>
+            {{ hotel.name }}
+          </strong>
 
-          <tbody>
-            <tr
-              v-for="trip in result.trips"
-              :key="trip.trip_id"
-            >
-              <td>{{ trip.trip_name }}</td>
-              <td>{{ trip.check_in }}</td>
-              <td>{{ trip.check_out }}</td>
-              <td>
-                <button @click="createBooking(trip.trip_id)">
-                  Book
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          <span v-if="hotel.address">
+            {{ hotel.address }}
+          </span>
+
+          <span v-if="hotel.distance != null">
+            Approximately
+            {{ (hotel.distance / 1000).toFixed(1) }}
+            km from the search center
+          </span>
+        </button>
+      </div>
+
+      <div class="map-panel">
+        <h2>Map</h2>
+
+        <p v-if="center">
+          Search center:
+          {{ center.formatted }}
+        </p>
+
+        <div
+          ref="mapElement"
+          class="map"
+          aria-label="Map of nearby hotels"
+        ></div>
       </div>
     </section>
 
-    <p v-if="message" class="message">
-      {{ message }}
-    </p>
-
-    <section class="card">
-      <h2>Booking History</h2>
-
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Traveler</th>
-            <th>Hotel</th>
-            <th>Trip</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr
-            v-for="booking in bookings"
-            :key="booking.booking_id"
-          >
-            <td>{{ booking.booking_id }}</td>
-            <td>{{ booking.display_name }}</td>
-            <td>{{ booking.hotel_name }}</td>
-            <td>{{ booking.trip_name }}</td>
-            <td>{{ booking.status }}</td>
-            <td>
-              <button
-                v-if="booking.status !== 'cancelled'"
-                @click="cancelBooking(booking.booking_id)"
-              >
-                Cancel
-              </button>
-
-              <button
-                class="delete"
-                @click="deleteBooking(booking.booking_id)"
-              >
-                Delete
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+    <footer>
+      Hotel and location information comes from Geoapify.
+      Results represent available provider data and do not
+      indicate prices, room availability, ratings, or booking
+      confirmation.
+    </footer>
   </main>
 </template>
 
 <style scoped>
 main {
-  max-width: 1100px;
-  margin: 40px auto;
-  padding: 20px;
+  max-width: 1250px;
+  margin: 0 auto;
+  padding: 32px 20px;
   font-family: Arial, sans-serif;
+  color: #222;
 }
 
 header {
-  margin-bottom: 30px;
+  margin-bottom: 28px;
 }
 
 h1 {
+  margin-bottom: 6px;
   font-size: 38px;
-  margin-bottom: 8px;
 }
 
-.card {
-  background: #ffffff;
-  color: #222222;
-  padding: 24px;
-  border-radius: 12px;
+header p {
+  margin-top: 0;
+  color: #555;
+}
+
+.search-card {
+  padding: 22px;
   margin-bottom: 24px;
+  background: #f5f5f5;
+  border-radius: 12px;
 }
 
-.row {
+.search-card label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+.search-row {
   display: flex;
   gap: 10px;
-  margin-bottom: 18px;
-  align-items: center;
-}
-
-input,
-select {
-  padding: 10px;
-  font-size: 16px;
 }
 
 input {
-  width: 320px;
+  width: 220px;
+  padding: 11px;
+  font-size: 16px;
 }
 
 button {
-  padding: 9px 14px;
+  font: inherit;
+}
+
+.search-row button {
+  padding: 11px 18px;
   cursor: pointer;
-  margin-right: 6px;
 }
 
-.delete {
-  background: #b42318;
-  color: white;
+.search-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
-.hotel {
-  margin-top: 25px;
+.status {
+  margin-bottom: 0;
+  margin-top: 14px;
 }
 
-table {
+.results-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 24px;
+}
+
+.results-panel,
+.map-panel {
+  min-width: 0;
+}
+
+.summary {
+  color: #555;
+}
+
+.results-panel {
+  max-height: 650px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.hotel-card {
+  display: block;
   width: 100%;
-  border-collapse: collapse;
-  margin-top: 15px;
-}
-
-th,
-td {
-  border: 1px solid #cccccc;
-  padding: 10px;
+  padding: 16px;
+  margin-bottom: 10px;
   text-align: left;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 9px;
+  cursor: pointer;
 }
 
-.message {
-  padding: 12px;
-  background: #dff7e5;
-  color: #124d24;
-  border-radius: 8px;
+.hotel-card:hover,
+.hotel-card:focus {
+  border: 2px solid #555;
+}
+
+.hotel-card.selected {
+  border: 3px solid #222;
+}
+
+.hotel-card strong,
+.hotel-card span {
+  display: block;
+}
+
+.hotel-card strong {
+  margin-bottom: 7px;
+  font-size: 17px;
+}
+
+.hotel-card span {
+  margin-top: 5px;
+  color: #555;
+  line-height: 1.4;
+}
+
+.map {
+  width: 100%;
+  height: 560px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #ddd;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+@media (max-width: 850px) {
+  .results-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .map {
+    height: 420px;
+  }
 }
 </style>

@@ -1,12 +1,13 @@
 # IST 402 — Assignment 2 Part 1
 ## Live Hotel Search and Map
 
-### 1. Project Access
+## 1. Project Access
+
 **Repository:**  
 https://github.com/prothamasinha/expedia-lite
 
 **Assessed Commit:**  
-8f9a4e0cc77ee25f6f7a05d61d082b0a7759576d
+aaad65806e9c812244e65b6ed1b9a387c951ef05
 
 ### Startup and Configuration Instructions
 
@@ -17,6 +18,50 @@ https://github.com/prothamasinha/expedia-lite
 
 ```bash
 cd backend
+```
+
+3. Activate the virtual environment:
+
+```bash
+source venv/bin/activate
+```
+
+4. Start the FastAPI backend:
+
+```bash
+uvicorn main:app --reload
+```
+
+The Geoapify API key is stored locally in `backend/.env` using:
+
+```text
+GEOAPIFY_API_KEY=your_key_here
+```
+
+The `.env` file is ignored by Git and is not committed to the repository.
+
+#### Frontend
+
+1. Open another terminal.
+2. Navigate to the frontend folder:
+
+```bash
+cd frontend
+```
+
+3. Start the Vue application:
+
+```bash
+npm run dev
+```
+
+4. Open the local URL displayed by Vite, normally:
+
+```text
+http://localhost:5173
+```
+
+---
 
 ## 2. Research Notes
 
@@ -30,46 +75,49 @@ Before implementation, I reviewed the Geoapify Geocoding API, Geoapify Places AP
 
 ### What I Learned
 
-Geoapify's geocoding API can resolve a U.S. ZIP code into latitude and longitude coordinates. I used the returned ZIP location as the center of the hotel search rather than using the user's current location.
+Geoapify's geocoding API can resolve a U.S. ZIP code into latitude and longitude coordinates. I used the returned ZIP location as the center of the hotel search instead of using the user's current location.
 
-The Geoapify Places API can search for hotel locations within a geographic radius. I used a 5 km radius around the ZIP-code center as required by the assignment.
+The Geoapify Places API can search for hotel locations within a geographic radius. For this project, the backend searches within 5 km of the ZIP-code center.
 
-Leaflet provides an interactive map that can display hotel locations with markers and popups.
+Leaflet provides an interactive map that can display returned hotel locations using markers and popups.
+
+One important design concern was making sure the application only displays information that is actually available from the provider. Geoapify provides place and location information, so I did not add invented hotel prices, ratings, room availability, or booking confirmations.
 
 ### Design Decisions
 
 Based on the research, I designed the application so that:
 
-- the user enters a five-digit U.S. ZIP code;
-- hotel data is requested through the FastAPI backend;
+- users enter a five-digit U.S. ZIP code;
+- Geoapify requests go through the FastAPI backend;
 - the Geoapify API key stays in the backend `.env` file;
 - hotel results appear in both a list and a Leaflet map;
 - clicking a hotel in the list identifies the same hotel on the map;
-- clicking a marker on the map identifies the same hotel in the list;
-- the application displays only information actually returned by Geoapify;
-- prices, ratings, room availability, and booking claims are not invented;
-- invalid ZIP codes, unresolved ZIP codes, empty results, loading states, and request failures are handled separately.
+- clicking a map marker identifies the same hotel in the list;
+- hotel names, addresses, coordinates, and distances come from the provider data;
+- invalid input, unresolved ZIP codes, loading, empty results, and request failures have separate interface states.
+
+---
 
 ## 3. Early Mockup
 
-Before implementation, I created an early design showing the planned ZIP-code search, hotel results list, and map layout.
 
-**Mockup:**  
-[ADD MOCKUP IMAGE OR LINK HERE]
+Before implementation, the planned interface used a ZIP-code search at the top with hotel results and a map as the main content.
 
-The original design focused on a simple search-first layout. During implementation, I kept the same basic idea but adjusted the spacing and result layout so the hotel list and Leaflet map could be viewed side by side. I also added clear messages for invalid ZIP codes, unresolved ZIP codes, loading, empty results, and failed requests.
+During implementation, I kept that basic structure but adjusted the layout so the hotel list and Leaflet map could be viewed side by side. I also added clearer feedback for invalid ZIP codes, unresolved ZIP codes, loading, empty results, and failed requests.
+
+---
 
 ## 4. Screen-Recorded Demo
 
 **Demo Video:**  
-[ADD VIDEO LINK HERE]
+https://drive.google.com/file/d/1CS0eVjHkfNUn6F7-1nP-xIRPU-iojN2o/view?usp=sharing
 
-The demo shows:
+The demonstration shows:
 
 - entering ZIP code `16802`;
 - Geoapify returning nearby hotels;
-- the hotels appearing in a list and on the Leaflet map;
-- selecting Scholar Hotel State College from the list and seeing the corresponding map popup;
+- hotel results appearing in a list and on a Leaflet map;
+- selecting Scholar Hotel State College from the list and seeing its map popup;
 - selecting Nittany Lion Inn from the map and seeing the matching list item selected;
 - invalid ZIP handling;
 - unresolved ZIP handling;
@@ -88,10 +136,12 @@ The demo shows:
 `16802`
 
 **Expected Result:**  
-The backend should resolve the ZIP code to the intended U.S. postcode location and search for hotels within 5 km of that point.
+The backend should resolve the requested U.S. ZIP code and use that returned location as the center of a hotel search within 5 km.
 
 **Observed Result:**  
-The ZIP resolved to State College, Pennsylvania. Geoapify returned 20 nearby hotel results, including Scholar Hotel State College, Hotel State College, Nittany Lion Inn, Hyatt Place State College, and others. The hotels appeared in both the list and the Leaflet map.
+The ZIP resolved to State College, Pennsylvania. Geoapify returned 20 nearby hotel results. The results appeared in both the hotel list and the Leaflet map.
+
+Examples included Scholar Hotel State College, Hotel State College, Nittany Lion Inn, Hyatt Place State College, and Graduate by Hilton State College.
 
 **Result:** Pass
 
@@ -101,10 +151,10 @@ The ZIP resolved to State College, Pennsylvania. Geoapify returned 20 nearby hot
 Clicked Scholar Hotel State College in the hotel list.
 
 **Expected Result:**  
-The same hotel should be identified on the map.
+The corresponding hotel should be identified on the map.
 
 **Observed Result:**  
-The map moved to Scholar Hotel State College and opened its popup.
+The map moved to Scholar Hotel State College and opened its popup. The hotel remained selected in the list.
 
 **Result:** Pass
 
@@ -114,23 +164,25 @@ The map moved to Scholar Hotel State College and opened its popup.
 Clicked the Nittany Lion Inn marker on the map.
 
 **Expected Result:**  
-The corresponding hotel should be identified in the list.
+The corresponding hotel should be identified in the hotel list.
 
 **Observed Result:**  
-The Nittany Lion Inn popup opened and the matching hotel card in the list became selected.
+The Nittany Lion Inn popup opened and the corresponding hotel card became selected in the list.
 
 **Result:** Pass
 
-### Test 4 — Invalid ZIP
+### Test 4 — Invalid ZIP Input
 
 **Input:**  
 `123`
 
 **Expected Result:**  
-The application should reject the input before performing a search.
+The application should reject the input instead of performing a hotel search.
 
 **Observed Result:**  
-The application displayed: `Please enter a valid five-digit U.S. ZIP code.`
+The application displayed:
+
+`Please enter a valid five-digit U.S. ZIP code.`
 
 **Result:** Pass
 
@@ -140,60 +192,72 @@ The application displayed: `Please enter a valid five-digit U.S. ZIP code.`
 `00000`
 
 **Expected Result:**  
-The application should not silently search a different location.
+The application should report that the ZIP cannot be resolved and should not silently search a different location.
 
 **Observed Result:**  
-The application displayed: `That U.S. ZIP code could not be resolved.`
+The application displayed:
+
+`That U.S. ZIP code could not be resolved.`
 
 **Result:** Pass
 
 ### Test 6 — Failed Request
 
 **Action:**  
-Stopped the FastAPI backend and attempted a search for `16802`.
+Stopped the FastAPI backend and attempted another search for `16802`.
 
 **Expected Result:**  
-The application should display a request failure instead of saying that no hotels were found.
+The application should report a failed request instead of describing the situation as an empty successful search.
 
 **Observed Result:**  
-The application displayed: `The request could not be completed. Please try again.`
+The application displayed:
+
+`The request could not be completed. Please try again.`
 
 **Result:** Pass
 
 ### Test 7 — Credential Protection
 
 **Action:**  
-Used `git check-ignore -v .env`.
+Ran:
+
+```bash
+git check-ignore -v .env
+```
 
 **Expected Result:**  
-The `.env` file should be ignored by Git.
+The local `.env` file should be ignored by Git.
 
 **Observed Result:**  
-Git reported that `.env` is ignored through `.gitignore`.
+Git reported that `.env` was covered by `.gitignore`.
 
 **Result:** Pass
 
-### Test 8 — Dependency Verification
+### Test 8 — Dependency Check and Verification
 
-Before installing new dependencies, the existing environment was checked.
+Before adding dependencies, I checked the existing project environment.
 
-For the backend, `requests` and `python-dotenv` were initially not installed in the project virtual environment. After approval, they were installed and verified.
+For the backend, `requests` and `python-dotenv` were not installed in the project virtual environment. After reviewing why they were required and approving the installation, both were installed.
 
-For the frontend, Leaflet was checked with:
+For the frontend, I ran:
 
-`npm list leaflet`
+```bash
+npm list leaflet
+```
 
-It was not installed. After approval, Leaflet was installed and verified as version `1.9.4`.
+The first check showed that Leaflet was not installed. After approving the installation, Leaflet was installed and verified as version `1.9.4`.
 
 **Result:** Pass
 
 ### Remaining Limitations
 
-The live hotel results depend on Geoapify's current provider data, so the number and details of returned hotels may change over time.
+Live hotel results depend on Geoapify's current provider data, so the number and details of returned hotels may change.
 
-The application does not claim that the results are a complete inventory of every hotel in the area.
+The application does not claim that the returned list contains every hotel in the area.
 
-Geoapify provides location information, so the application does not invent hotel prices, ratings, room availability, or booking confirmation.
+Geoapify supplies place information rather than confirmed booking information. Therefore, the application does not invent nightly prices, ratings, room availability, or booking confirmations.
+
+A dedicated simulated no-results case was not completed during the recorded verification session. The frontend includes a separate empty-results state for a successful response containing no hotels.
 
 ---
 
@@ -202,7 +266,7 @@ Geoapify provides location information, so the application does not invent hotel
 **AI Tool:** ChatGPT  
 **Model:** GPT-5.6 Sol
 
-I used ChatGPT as a development assistant while completing Assignment 2 Part 1.
+I used ChatGPT as a development assistant while completing Assignment 2 Part 1. I reviewed and tested suggested changes before including them in the project.
 
 ### Use 1 — Backend API Integration
 
@@ -210,9 +274,9 @@ I used ChatGPT as a development assistant while completing Assignment 2 Part 1.
 "just rewrite the whole thing"
 
 **Use:**  
-ChatGPT helped me revise `main.py` so FastAPI could accept a five-digit ZIP code, use Geoapify to resolve the ZIP location, and request nearby hotels within 5 km.
+ChatGPT helped revise `backend/main.py` so FastAPI could accept a five-digit ZIP code, resolve the ZIP through Geoapify, validate that the returned U.S. postcode matched the requested ZIP, and search for hotels within 5 km.
 
-**Related change:**  
+**Related Change:**  
 `backend/main.py`
 
 ### Use 2 — Frontend and Leaflet Integration
@@ -221,34 +285,34 @@ ChatGPT helped me revise `main.py` so FastAPI could accept a five-digit ZIP code
 "then"
 
 **Use:**  
-ChatGPT helped me update `App.vue` to display hotel results in a list and on a Leaflet map and synchronize selection between the two.
+ChatGPT helped revise `frontend/src/App.vue` to provide ZIP-code search, hotel results, a Leaflet map, and synchronized list and map selection.
 
-**Related change:**  
+**Related Change:**  
 `frontend/src/App.vue`
 
-### Use 3 — Dependency Check and Installation
+### Use 3 — Dependency Process
 
 **Prompt excerpt:**  
 "im confused what should i do next"
 
 **Use:**  
-ChatGPT helped me follow the CHECK, TAKE ACTION, and VERIFY process before installing `requests`, `python-dotenv`, and Leaflet.
+ChatGPT helped me follow the required CHECK, TAKE ACTION, and VERIFY process for project dependencies.
 
-**Related changes:**  
-Backend virtual environment and frontend npm dependencies.
+I first checked whether `requests`, `python-dotenv`, and Leaflet were already installed. The proposed installations were explained before I approved them. After installation, I verified the packages again.
+
+**Related Changes:**  
+Backend Python environment and frontend npm dependencies.
 
 ### Failed or Revised Approach
 
-**Initial approach:**  
-The existing Expedia Lite application searched local hotel records by hotel name and included booking-related features.
+**Initial Approach:**  
+The existing Expedia Lite application searched supplied local hotel records by hotel name and included traveler and booking functionality.
 
 **Problem:**  
-Searching `16802` produced `No matching hotels found` because the application was still using the older local search functionality instead of live Geoapify data.
+Entering `16802` produced `No matching hotels found` because the application was still using the older local hotel search instead of the new live Geoapify workflow. The interface also did not include the required map.
 
 **Revision:**  
-I added a new FastAPI route that resolves ZIP codes through Geoapify and searches nearby hotels. I then replaced the frontend search interface with ZIP-code search and a synchronized Leaflet map.
+I added a new FastAPI hotel-discovery endpoint that uses Geoapify for ZIP geocoding and nearby hotel searches. I then revised the Vue interface to search by ZIP code and display synchronized hotel results in a list and Leaflet map.
 
 **Result:**  
-The final version successfully searches live hotel data using ZIP code `16802` and displays synchronized hotel results on the list and map.
-
-AI suggestions were reviewed and tested before being included in the final project.
+The revised application successfully resolved `16802`, returned live nearby hotel information from Geoapify, displayed the results on the map and in the list, and passed the tested input and request-failure cases.

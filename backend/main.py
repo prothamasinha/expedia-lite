@@ -289,3 +289,95 @@ def remove_booking(booking_id: str):
         "message": "Booking deleted",
         "booking_id": booking_id,
     }
+
+
+
+
+
+
+
+
+
+
+
+ 
+# --------------------------------------------------
+# ASSIGNMENT 2 PART 2 - LOCAL HOTEL API
+# --------------------------------------------------
+
+from typing import Optional
+from pydantic import BaseModel
+
+from controller import (
+    save_local_hotel,
+    get_saved_hotels,
+    get_demo_nights,
+    remove_local_hotel,
+)
+
+
+# Data received when the frontend saves a hotel
+class LocalHotelCreate(BaseModel):
+    place_id: str
+    name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postcode: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    search_zip: Optional[str] = None
+
+
+# SAVE A HOTEL LOCALLY
+@app.post("/local/hotels")
+def add_local_hotel(hotel: LocalHotelCreate):
+    try:
+        hotel_data = hotel.dict(exclude={"search_zip"})
+
+        return save_local_hotel(
+            hotel_data,
+            hotel.search_zip,
+        )
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+
+# GET ALL SAVED HOTELS
+@app.get("/local/hotels")
+def list_local_hotels():
+    return {
+        "hotels": get_saved_hotels(),
+        "simulated_data": True,
+    }
+
+
+# GET SIMULATED NIGHTLY DATA
+@app.get("/local/nights")
+def list_local_nights(place_id: Optional[str] = None):
+    return {
+        "nights": get_demo_nights(place_id),
+        "simulated_data": True,
+        "notice": (
+            "Prices and room availability are simulated "
+            "course demonstration data, not real bookings."
+        ),
+    }
+
+
+# REMOVE A SAVED HOTEL
+@app.delete("/local/hotels/{place_id}")
+def delete_local_hotel(place_id: str):
+    return remove_local_hotel(place_id)
+   
+
+
+
+
+# Register Assignment 2 Part 2 AI chatbot
+from chatbot import router as chatbot_router
+app.include_router(chatbot_router)

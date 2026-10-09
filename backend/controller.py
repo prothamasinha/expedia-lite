@@ -1,3 +1,4 @@
+
 import csv
 import sqlite3
 from datetime import date
@@ -6,6 +7,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "expedia_lite.db"
 
+
+# --------------------------------------------------
+# DATABASE CONNECTION
+# --------------------------------------------------
 
 def get_connection():
     connection = sqlite3.connect(DB_PATH)
@@ -18,10 +23,15 @@ def read_csv(filename):
         return list(csv.DictReader(file))
 
 
+# --------------------------------------------------
+# INITIALIZE DATABASE
+# --------------------------------------------------
+
 def initialize_database():
     connection = get_connection()
     cursor = connection.cursor()
 
+    # Original Assignment 1 hotels table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS hotels (
             hotel_id TEXT PRIMARY KEY,
@@ -32,6 +42,7 @@ def initialize_database():
         )
     """)
 
+    # Original trips table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS trips (
             trip_id TEXT PRIMARY KEY,
@@ -43,6 +54,7 @@ def initialize_database():
         )
     """)
 
+    # Original users table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id TEXT PRIMARY KEY,
@@ -50,6 +62,7 @@ def initialize_database():
         )
     """)
 
+    # Original bookings table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS bookings (
             booking_id TEXT PRIMARY KEY,
@@ -62,8 +75,55 @@ def initialize_database():
         )
     """)
 
+    # --------------------------------------------------
+    # ASSIGNMENT 2 PART 2
+    # SAVED HOTELS FROM GEOAPIFY
+    # --------------------------------------------------
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS saved_hotels (
+            place_id TEXT PRIMARY KEY,
+            hotel_name TEXT NOT NULL,
+            address TEXT,
+            city TEXT,
+            state TEXT,
+            postcode TEXT,
+            latitude REAL,
+            longitude REAL,
+            search_zip TEXT,
+            saved_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # --------------------------------------------------
+    # ASSIGNMENT 2 PART 2
+    # SIMULATED NIGHTLY RATES AND AVAILABILITY
+    # --------------------------------------------------
+
+    # These values are simulated course data.
+    # They do not represent actual hotel prices
+    # or real room availability.
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS demo_hotel_nights (
+            place_id TEXT NOT NULL,
+            stay_date TEXT NOT NULL,
+            nightly_rate_usd REAL NOT NULL,
+            rooms_available INTEGER NOT NULL,
+            PRIMARY KEY (place_id, stay_date),
+            FOREIGN KEY (place_id)
+                REFERENCES saved_hotels(place_id)
+        )
+    """)
+
+    # --------------------------------------------------
+    # LOAD ORIGINAL ASSIGNMENT 1 CSV DATA
+    # --------------------------------------------------
+
     cursor.execute("SELECT COUNT(*) FROM hotels")
+
     if cursor.fetchone()[0] == 0:
+
         for hotel in read_csv("hotels.csv"):
             cursor.execute(
                 """
@@ -125,6 +185,10 @@ def initialize_database():
     connection.close()
 
 
+# --------------------------------------------------
+# SEARCH ORIGINAL HOTELS
+# --------------------------------------------------
+
 def search_hotels(name):
     connection = get_connection()
 
@@ -179,14 +243,29 @@ def search_hotels(name):
 
     return list(hotels.values())
 
+     
+
+
+
+# --------------------------------------------------
+# GET USERS
+# --------------------------------------------------
 
 def get_users():
     connection = get_connection()
-    rows = connection.execute("SELECT * FROM users").fetchall()
+
+    rows = connection.execute(
+        "SELECT * FROM users"
+    ).fetchall()
+
     connection.close()
 
     return [dict(row) for row in rows]
 
+
+# --------------------------------------------------
+# GET BOOKINGS
+# --------------------------------------------------
 
 def get_bookings():
     connection = get_connection()
@@ -214,6 +293,10 @@ def get_bookings():
 
     return [dict(row) for row in rows]
 
+
+# --------------------------------------------------
+# CREATE BOOKING
+# --------------------------------------------------
 
 def create_booking(user_id, trip_id):
     connection = get_connection()
@@ -253,6 +336,10 @@ def create_booking(user_id, trip_id):
     return booking_id
 
 
+# --------------------------------------------------
+# UPDATE BOOKING STATUS
+# --------------------------------------------------
+
 def update_booking_status(booking_id, status):
     connection = get_connection()
 
@@ -269,6 +356,10 @@ def update_booking_status(booking_id, status):
     connection.close()
 
 
+# --------------------------------------------------
+# DELETE BOOKING
+# --------------------------------------------------
+
 def delete_booking(booking_id):
     connection = get_connection()
 
@@ -282,3 +373,176 @@ def delete_booking(booking_id):
 
     connection.commit()
     connection.close()
+
+
+
+
+
+
+
+
+
+# --------------------------------------------------
+# ASSIGNMENT 2 PART 2 - LOCAL HOTEL FUNCTIONS
+# --------------------------------------------------
+
+def save_local_hotel(hotel, search_zip):
+    import hashlib
+    from datetime import timedelta
+
+    place_id = str(hotel.get("place_id") or "").strip()
+    if not place_id:
+        raise ValueError("A Geoapify place_id is required.")
+
+    hotel_name = hotel.get("name") or "Hotel name unavailable"
+
+    connection = get_connection()
+
+    try:
+        with connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO saved_hotels
+                (
+                    place_id, hotel_name, address, city,
+                    state, postcode, latitude, longitude,
+                    search_zip
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    place_id,
+                    hotel_name,
+                    hotel.get("address"),
+                    hotel.get("city"),
+                    hotel.get("state"),
+                    hotel.get("postcode"),
+                    hotel.get("latitude"),
+                    hotel.get("longitude"),
+                    search_zip,
+                ),
+            )
+
+            newly_saved = cursor.rowcount == 1
+
+            # Deterministic simulated course data.
+            # These are NOT real rates or availability.
+            seed = int(
+                hashlib.sha256(place_id.encode()).hexdigest()[:8],
+                16
+            )
+
+            for day_number in range(30):
+                stay_date = (
+                    date.today() + timedelta(days=day_number)
+                ).isoformat()
+
+                nightly_rate = float(
+                    90 + seed % 140 + (day_number % 4) * 8
+                )
+
+                rooms_available = (
+                    0 if (seed + day_number) % 7 == 0 else 2
+                )
+
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO demo_hotel_nights
+                    (place_id, stay_date, nightly_rate_usd,
+                     rooms_available)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        place_id,
+                        stay_date,
+                        nightly_rate,
+                        rooms_available,
+                    ),
+                )
+
+        return {
+            "message": "Hotel saved locally",
+            "place_id": place_id,
+            "newly_saved": newly_saved,
+            "simulated_data": True,
+        }
+
+    finally:
+        connection.close()
+
+
+def get_saved_hotels():
+    connection = get_connection()
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM saved_hotels
+            ORDER BY saved_at DESC, hotel_name
+            """
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+
+    finally:
+        connection.close()
+
+
+def get_demo_nights(place_id=None):
+    connection = get_connection()
+
+    try:
+        if place_id:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM demo_hotel_nights
+                WHERE place_id = ?
+                ORDER BY stay_date
+                """,
+                (place_id,),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM demo_hotel_nights
+                ORDER BY stay_date, place_id
+                """
+            ).fetchall()
+
+        return [dict(row) for row in rows]
+
+    finally:
+        connection.close()
+
+
+def remove_local_hotel(place_id):
+    connection = get_connection()
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                DELETE FROM demo_hotel_nights
+                WHERE place_id = ?
+                """,
+                (place_id,),
+            )
+
+            cursor = connection.execute(
+                """
+                DELETE FROM saved_hotels
+                WHERE place_id = ?
+                """,
+                (place_id,),
+            )
+
+        return {
+            "message": "Hotel removed locally",
+            "removed": cursor.rowcount > 0,
+        }
+
+    finally:
+        connection.close()
